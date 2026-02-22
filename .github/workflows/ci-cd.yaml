@@ -1,0 +1,36 @@
+name: Secure-Go-Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      # 1. Проверка известных уязвимостей в зависимостях (SCA)
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/exp/govulncheck@latest
+          govulncheck ./...
+
+      # 2. Статический анализ кода на ошибки безопасности (SAST)
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...
+
+      # 3. Базовая проверка качества и синтаксиса
+      - name: Run go vet
+        run: go vet ./...

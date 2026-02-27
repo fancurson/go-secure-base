@@ -1,10 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
+)
+
+const (
+	HttpReadTimeOut  = 5 * time.Second
+	HttpWriteTimeout = 10 * time.Second
+	HttpIdleTimeout  = 120 * time.Second
 )
 
 func greet(w http.ResponseWriter, r *http.Request) {
@@ -24,15 +31,15 @@ func main() {
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      mux,
-		ReadTimeout:  5 * time.Second,  // Ограничение времени на чтение запроса
-		WriteTimeout: 10 * time.Second, // Ограничение времени на запись ответа
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  HttpReadTimeOut,  // Ограничение времени на чтение запроса
+		WriteTimeout: HttpWriteTimeout, // Ограничение времени на запись ответа
+		IdleTimeout:  HttpIdleTimeout,
 	}
 
 	log.Println("Server starting on :8080...")
 
 	// Исправляем G104: явно проверяем ошибку
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Critical server failure: %v", err)
 	}
 }

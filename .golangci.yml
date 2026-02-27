@@ -1,0 +1,25 @@
+version: "2"
+
+run:
+  go: "1.26"
+  timeout: 5m
+
+linters:
+  enable:
+    - gosec         # Поиск уязвимостей (SAST)
+    - errcheck      # Проверка необработанных ошибок
+    - staticcheck   # Базовые баги и оптимизации
+    - bodyclose     # Утечки HTTP-соединений
+    - copyloopvar   # Ошибки переменных цикла
+
+formatters:
+  enable:
+    - gofmt
+    - gci
+
+issues:
+  exclude-use-default: true
+  # Если fmt.Fprintf всё еще бесит, можно временно разрешить его здесь
+  exclude-rules:
+    - linters: [errcheck]
+      text: "fmt.Fprintf"

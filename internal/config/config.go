@@ -12,6 +12,8 @@ const (
 	httpReadHeaderTimeout = 10 * time.Second
 
 	addr = ":8080"
+
+	httpMaxHeaderBytes = 1 << 20 // 1MB
 )
 
 // Config represents the server configuration parameters.
@@ -20,6 +22,8 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ReadHeaderTimeout time.Duration
+
+	MaxHeaderBytes int
 
 	Addr string
 }
@@ -31,6 +35,8 @@ func New() *Config {
 		WriteTimeout:      httpWriteTimeout,
 		IdleTimeout:       httpIdleTimeout,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
+
+		MaxHeaderBytes: httpMaxHeaderBytes,
 
 		Addr: addr,
 	}

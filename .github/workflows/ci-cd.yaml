@@ -33,9 +33,7 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec ./...
 
-  # НОВАЯ работа: AI Code Review
   ai-review:
-    # Запускаем только для Pull Request, чтобы не тратить токены на каждый пуш в ветку
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -53,13 +51,16 @@ jobs:
         uses: coderabbitai/ai-pr-reviewer@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # МЕНЯЕМ ТУТ: экшен внутри себя ищет именно это имя для совместимости
+          OPENAI_API_KEY: ${{ secrets.GEMINI_API_KEY }} 
         with:
           debug: false
-          openai_base_url: https://generativelanguage.googleapis.com/v1beta/openai/
-          openai_api_model: gemini-2.0-flash
+          # Убираем лишние префиксы, теперь это настраивается так:
+          base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+          # Название модели переносим просто в соответствующее поле
+          model: gemini-2.0-flash
           summarize: true
           system_message: |
             Ты Senior Go Developer. 
             Делай ревью на русском языке. 
-            Уделяй внимание обработке ошибок (error handling), конкурентности (goroutines/channels) и идиоматичности кода (Uber Go style).
+            Уделяй внимание обработке ошибок, конкурентности и идиоматичности Go.

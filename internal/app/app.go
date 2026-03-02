@@ -6,14 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/fancurson/go-secure-base/internal/config"
+	"github.com/fancurson/go-secure-base/internal/httpsrv"
 )
 
 const (
@@ -27,7 +28,8 @@ var isShuttingDown atomic.Bool
 // Run initializes and starts the application server with graceful shutdown support.
 func Run() error {
 	cfg := config.New()
-	logger := slog.Default()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	serverErrors := make(chan error, 1)
 
@@ -39,23 +41,14 @@ func Run() error {
 	ongoingCtx, stopOngoingGracefully := context.WithCancel(context.Background())
 	defer stopOngoingGracefully()
 
-	server := &http.Server{
-		Addr: cfg.Addr,
+	mux := http.NewServeMux()
 
-		ReadTimeout:       cfg.ReadTimeout,
-		WriteTimeout:      cfg.WriteTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-
-		BaseContext: func(_ net.Listener) context.Context {
-			return ongoingCtx
-		},
-	}
+	srv := httpsrv.NewServer(ongoingCtx, cfg, mux)
 
 	go func() {
 		logger.Info("server starting", slog.String("addr", cfg.Addr))
 
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrors <- fmt.Errorf("listen and serve: %w", err)
 		}
 	}()
@@ -75,7 +68,7 @@ func Run() error {
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), _shutdownPeriod)
 		defer cancel()
-		err := server.Shutdown(shutdownCtx)
+		err := srv.Shutdown(shutdownCtx)
 		stopOngoingGracefully()
 		if err != nil {
 			logger.Error("Failed to wait for ongoing requests to finish, waiting for forced cancellation.")

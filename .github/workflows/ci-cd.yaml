@@ -51,14 +51,14 @@ jobs:
         uses: coderabbitai/ai-pr-reviewer@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # МЕНЯЕМ ТУТ: экшен внутри себя ищет именно это имя для совместимости
-          OPENAI_API_KEY: ${{ secrets.GEMINI_API_KEY }} 
+          # Передаем всё через ENV, чтобы экшен не ругался на "unexpected input"
+          OPENAI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_HOST: generativelanguage.googleapis.com
+          # Важно: тут прописываем полный путь для OpenAI-совместимости
+          OPENAI_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai/
         with:
-          debug: false
-          # Убираем лишние префиксы, теперь это настраивается так:
-          base_url: https://generativelanguage.googleapis.com/v1beta/openai/
-          # Название модели переносим просто в соответствующее поле
-          model: gemini-2.0-flash
+          debug: true # Оставь пока true, чтобы видеть детали в логах, если упадет
+          # В самом with оставляем только общие настройки, без модели и урла
           summarize: true
           system_message: |
             Ты Senior Go Developer. 

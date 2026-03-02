@@ -14,5 +14,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "application failed: %v\n", err)
 		os.Exit(1)
 	}
-
 }

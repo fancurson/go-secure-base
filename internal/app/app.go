@@ -42,6 +42,14 @@ func Run() error {
 	defer stopOngoingGracefully()
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if isShuttingDown.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	srv := httpsrv.NewServer(ongoingCtx, cfg, mux)
 

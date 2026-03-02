@@ -11,9 +11,11 @@ import (
 
 // NewServer returns a pre-configured http.Server with hardened settings.
 func NewServer(baseCtx context.Context, cfg *config.Config, handler http.Handler) *http.Server {
+	SecureHandler := SecurityHeaders(handler)
+
 	return &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           handler,
+		Handler:           SecureHandler,
 		ReadTimeout:       cfg.ReadTimeout,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

@@ -98,8 +98,18 @@ linters:
     - wastedassign
     - whitespace
     - zerologlint
+  disable:
+    - depguard
 
 linters-settings:
+  depguard:
+    rules:
+      main:
+        list-mode: allow
+        allow:
+          - $gostd
+          - github.com/fancurson/go-secure-base # Разрешаем импорты внутри своего проекта
+          - github.com/fancurson/go-secure-base/** # Разрешаем импорты внутри своего проекта
   gocyclo:
     min-complexity: 15
   gocognit:
@@ -110,9 +120,9 @@ linters-settings:
     enable-all-rules: true
     rules:
       - name: exported
-        disabled: true # Чтобы не писать комментарии к каждой функции на старте
+        enabled: true # Включаем обратно!
       - name: package-comments
-        disabled: true
+        enabled: true # Включаем обратно!
   forbidigo:
     forbid:
       - '^(fmt\.Print(|f|ln)|print|println)$' # Запрет отладочного вывода

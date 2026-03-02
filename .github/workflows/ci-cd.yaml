@@ -1,31 +1,65 @@
-  name: Secure-Go-Pipeline
+name: Secure-Go-Pipeline
 
-  on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize]
 
-  jobs:
-    security-audit:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-        
-        - name: Set up Go
-          uses: actions/setup-go@v5
-          with:
-            go-version: '1.25'
-            cache: true
+jobs:
+  # Ваша текущая работа по безопасности
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
 
-        - name: Install dependencies
-          run: go mod tidy
+      - name: Install dependencies
+        run: go mod tidy
 
-        # SCA: Проверка уязвимостей (используем ПРАВИЛЬНЫЙ путь)
-        - name: Run govulncheck
-          run: |
-            go install golang.org/x/vuln/cmd/govulncheck@latest
-            govulncheck ./...
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
-        # SAST: Статический анализ
-        - name: Run gosec
-          run: |
-            go install github.com/securego/gosec/v2/cmd/gosec@latest
-            gosec ./...
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...
+
+  # НОВАЯ работа: AI Code Review
+  ai-review:
+    # Запускаем только для Pull Request, чтобы не тратить токены на каждый пуш в ветку
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Gemini AI Review
+        uses: coderabbitai/ai-pr-reviewer@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          debug: false
+          openai_base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+          openai_api_model: gemini-2.0-flash
+          summarize: true
+          system_message: |
+            Ты Senior Go Developer. 
+            Делай ревью на русском языке. 
+            Уделяй внимание обработке ошибок (error handling), конкурентности (goroutines/channels) и идиоматичности кода (Uber Go style).

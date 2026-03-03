@@ -7,7 +7,6 @@ on:
     types: [opened, synchronize]
 
 jobs:
-  # Ваша текущая работа по безопасности
   security-audit:
     runs-on: ubuntu-latest
     steps:
@@ -43,24 +42,49 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          # Важно: fetch-depth 0 нужен, чтобы сравнить ветки. 
+          # Иначе git diff не увидит разницы с main.
           fetch-depth: 0
 
+      - name: Prepare Context and Diff
+        id: prep
+        run: |
+          # 1. Генерируем структуру проекта (только папки и .go файлы)
+          echo "PROJECT_STRUCTURE<<EOF" >> $GITHUB_OUTPUT
+          find . -maxdepth 3 -not -path '*/.*' -not -path './vendor*' \( -type d -o -name "*.go" \) | sed 's/^\.\///' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # 2. Получаем дифф между текущей веткой и целевой веткой PR (обычно main)
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          
+          # 3. Проверяем, не пустой ли файл (на случай странных PR)
+          if [ ! -s pr_diff.txt ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Gemini AI Review
-        uses: coderabbitai/ai-pr-reviewer@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Передаем всё через ENV, чтобы экшен не ругался на "unexpected input"
-          OPENAI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_HOST: generativelanguage.googleapis.com
-          # Важно: тут прописываем полный путь для OpenAI-совместимости
-          OPENAI_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai/
+        if: steps.prep.outputs.skip == 'false'
+        id: gemini
+        uses: google-github-actions/run-gemini-cli@v0.2.0
         with:
-          debug: true # Оставь пока true, чтобы видеть детали в логах, если упадет
-          # В самом with оставляем только общие настройки, без модели и урла
-          summarize: true
-          system_message: |
-            Ты Senior Go Developer. 
-            Делай ревью на русском языке. 
-            Уделяй внимание обработке ошибок, конкурентности и идиоматичности Go.
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          model: 'gemini-2.0-flash'
+          # Простой базовый промпт, как ты и просил
+          prompt: |
+            Ты Senior Go Developer. Сделай краткое ревью кода на русском.
+            
+            СТРУКТУРА ПРОЕКТА:
+            ${{ steps.prep.outputs.PROJECT_STRUCTURE }}
+            
+            ИЗМЕНЕНИЯ (DIFF):
+            $(cat pr_diff.txt)
+
+      - name: Post Review Comment
+        if: steps.prep.outputs.skip == 'false' && steps.gemini.outputs.text != ''
+        uses: mshick/add-pr-comment@v2
+        with:
+          message: |
+            ### 🤖 AI Code Review
+            ${{ steps.gemini.outputs.text }}

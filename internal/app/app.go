@@ -15,6 +15,7 @@ import (
 
 	"github.com/fancurson/go-secure-base/internal/config"
 	"github.com/fancurson/go-secure-base/internal/httpsrv"
+	"github.com/fancurson/go-secure-base/internal/infra/logging"
 )
 
 const (
@@ -29,7 +30,9 @@ var isShuttingDown atomic.Bool
 func Run() error {
 	cfg := config.New()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	baseHandler := slog.NewJSONHandler(os.Stdout, nil)
+	secureHandler := logging.SecurityHandler{Next: baseHandler}
+	logger := slog.New(secureHandler)
 
 	serverErrors := make(chan error, 1)
 

@@ -47,12 +47,13 @@ jobs:
       - name: Prepare Context and Diff
         id: prep
         run: |
-          # Собираем структуру проекта
+          # Собираем структуру проекта (для контекста)
+          STRUCT=$(find . -maxdepth 3 -not -path '*/.*' -not -path './vendor*' \( -type d -o -name "*.go" \) | sed 's/^\.\///')
           echo "PROJECT_STRUCTURE<<EOF" >> $GITHUB_OUTPUT
-          find . -maxdepth 3 -not -path '*/.*' -not -path './vendor*' \( -type d -o -name "*.go" \) | sed 's/^\.\///' >> $GITHUB_OUTPUT
+          echo "$STRUCT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          # Получаем дифф
+          # Получаем дифф между ветками
           git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
           
           if [ ! -s pr_diff.txt ]; then
@@ -65,26 +66,35 @@ jobs:
         if: steps.prep.outputs.skip == 'false'
         id: gemini
         run: |
-          # Используем обычный curl для прямого запроса к API
-          # Это на 100% надежнее любого стороннего экшена
-          PROMPT="Ты Senior Go Developer. Сделай краткое ревью кода на русском. Структура проекта: ${{ steps.prep.outputs.PROJECT_STRUCTURE }}. Изменения: $(cat pr_diff.txt)"
+          # Формируем тело промпта
+          DIFF_CONTENT=$(cat pr_diff.txt)
+          STRUCT_CONTENT="${{ steps.prep.outputs.PROJECT_STRUCTURE }}"
           
-          # Экранируем спецсимволы для JSON
-          JSON_PROMPT=$(echo "$PROMPT" | jq -aRs .)
+          PROMPT="Ты Senior Go Developer. Сделай краткое ревью кода на русском. 
+          Структура проекта:
+          $STRUCT_CONTENT
+          
+          Изменения (diff):
+          $DIFF_CONTENT"
 
-          RESPONSE=$(curl https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }} \
+          # Безопасно упаковываем в JSON
+          cat <<EOF > request.json
+          {
+            "contents": [{
+              "parts":[{"text": $(echo "$PROMPT" | jq -aRs .)}]
+            }]
+          }
+          EOF
+
+          # Отправляем запрос напрямую в Google
+          RESPONSE=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H 'Content-Type: application/json' \
-            -X POST \
-            -d "{
-              \"contents\": [{
-                \"parts\":[{\"text\": $JSON_PROMPT}]
-              }]
-            }")
+            -d @request.json)
 
-          # Извлекаем текст ответа
-          REVIEW_TEXT=$(echo $RESPONSE | jq -r '.candidates[0].content.parts[0].text')
+          # Вытаскиваем текст ответа
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Ошибка: API не вернул текст ревью."')
           
-          # Сохраняем в выходной параметр (используем многострочный формат GitHub)
+          # Сохраняем результат для следующего шага
           echo "text<<EOF" >> $GITHUB_OUTPUT
           echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT

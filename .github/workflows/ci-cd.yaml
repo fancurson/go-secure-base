@@ -66,35 +66,34 @@ jobs:
         if: steps.prep.outputs.skip == 'false'
         id: gemini
         run: |
-          # Формируем тело промпта
-          DIFF_CONTENT=$(cat pr_diff.txt)
-          STRUCT_CONTENT="${{ steps.prep.outputs.PROJECT_STRUCTURE }}"
+          # Создаем файл с промптом, чтобы избежать проблем с кавычками в bash
+          cat <<EOF > prompt.txt
+          Ты Senior Go Developer. Сделай краткое ревью кода на русском.
           
-          PROMPT="Ты Senior Go Developer. Сделай краткое ревью кода на русском. 
-          Структура проекта:
-          $STRUCT_CONTENT
+          СТРУКТУРА ПРОЕКТА:
+          ${{ steps.prep.outputs.PROJECT_STRUCTURE }}
           
-          Изменения (diff):
-          $DIFF_CONTENT"
-
-          # Безопасно упаковываем в JSON
-          cat <<EOF > request.json
-          {
-            "contents": [{
-              "parts":[{"text": $(echo "$PROMPT" | jq -aRs .)}]
-            }]
-          }
+          ИЗМЕНЕНИЯ (DIFF):
+          $(cat pr_diff.txt)
           EOF
 
-          # Отправляем запрос напрямую в Google
+          # Генерируем чистый JSON запрос с помощью jq
+          jq -n --rawfile contents prompt.txt '{contents: [{parts: [{text: $contents}]}]}' > request.json
+
+          # Отправляем запрос и сохраняем полный лог ответа для отладки
           RESPONSE=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H 'Content-Type: application/json' \
             -d @request.json)
 
-          # Вытаскиваем текст ответа
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Ошибка: API не вернул текст ревью."')
+          # Проверяем, нет ли в ответе ошибки от самого Google
+          ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // empty')
+          if [ ! -z "$ERROR_MSG" ]; then
+            REVIEW_TEXT="Ошибка Google API: $ERROR_MSG"
+          else
+            REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Ошибка: API вернул пустой результат. Проверь лимиты или содержимое DIFF."')
+          fi
           
-          # Сохраняем результат для следующего шага
+          # Сохраняем результат
           echo "text<<EOF" >> $GITHUB_OUTPUT
           echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
